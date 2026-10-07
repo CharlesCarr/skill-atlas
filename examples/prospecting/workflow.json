@@ -1,0 +1,132 @@
+{
+  "version": 1,
+  "title": "Prospecting pipeline",
+  "description": "From a campaign hypothesis to a verified draft. Four skills, deliberate handoffs, and a human at the finish line.",
+  "steps": [
+    {
+      "id": "ideation",
+      "skill": "campaign-ideation",
+      "title": "Calibrate the campaign",
+      "phase": "01 \u00b7 Strategy",
+      "inputs": [
+        "Campaign hypothesis",
+        "Operator feedback"
+      ],
+      "outputs": [
+        "Selected strategy revision",
+        "Execution snapshot"
+      ]
+    },
+    {
+      "id": "setup",
+      "skill": "campaign-setup",
+      "title": "Freeze & coordinate",
+      "phase": "02 \u00b7 Preparation",
+      "inputs": [
+        "Selected strategy revision"
+      ],
+      "outputs": [
+        "Frozen criteria",
+        "Preparation checkpoint"
+      ]
+    },
+    {
+      "id": "research",
+      "skill": "campaign-research",
+      "title": "Find the right accounts",
+      "phase": "03 \u00b7 Evidence",
+      "inputs": [
+        "Frozen criteria",
+        "Research allowance"
+      ],
+      "outputs": [
+        "Eligible recipients",
+        "Source evidence"
+      ]
+    },
+    {
+      "id": "draft",
+      "skill": "sequence-drafter",
+      "title": "Draft the sequence",
+      "phase": "03 \u00b7 Messaging",
+      "inputs": [
+        "Selected claims & tone",
+        "Source evidence"
+      ],
+      "outputs": [
+        "Complete sequence proposal"
+      ]
+    },
+    {
+      "id": "readback",
+      "skill": "campaign-setup",
+      "title": "Prepare & verify",
+      "phase": "04 \u00b7 Readback",
+      "inputs": [
+        "Eligible recipients",
+        "Sequence proposal"
+      ],
+      "outputs": [
+        "Verified draft",
+        "Unresolved exceptions"
+      ]
+    },
+    {
+      "id": "review",
+      "kind": "human",
+      "title": "Review before launch",
+      "description": "The operator reviews recipients, rendered messages, sender settings, and schedule. Launch is a separate manual action.",
+      "phase": "05 \u00b7 Human decision",
+      "inputs": [
+        "Verified draft"
+      ],
+      "outputs": [
+        "Operator decision"
+      ]
+    }
+  ],
+  "connections": [
+    {
+      "from": "ideation",
+      "to": "setup",
+      "label": "Selected revision",
+      "type": "handoff"
+    },
+    {
+      "from": "setup",
+      "to": "research",
+      "label": "Frozen criteria",
+      "type": "handoff"
+    },
+    {
+      "from": "setup",
+      "to": "draft",
+      "label": "Claims & voice",
+      "type": "handoff"
+    },
+    {
+      "from": "research",
+      "to": "readback",
+      "label": "Eligible recipients",
+      "type": "handoff"
+    },
+    {
+      "from": "draft",
+      "to": "readback",
+      "label": "Sequence proposal",
+      "type": "handoff"
+    },
+    {
+      "from": "research",
+      "to": "draft",
+      "label": "Source evidence",
+      "type": "reference"
+    },
+    {
+      "from": "readback",
+      "to": "review",
+      "label": "Verified draft",
+      "type": "handoff"
+    }
+  ]
+}

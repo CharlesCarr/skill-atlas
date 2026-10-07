@@ -1,0 +1,195 @@
+[
+  {
+    "version": 1,
+    "id": "prospecting-demo",
+    "title": "Prospecting pipeline",
+    "description": "From a campaign hypothesis to a verified draft. Four skills, deliberate handoffs, and a human at the finish line.",
+    "files": [
+      {
+        "path": ".agents/skills/campaign-ideation/SKILL.md",
+        "content": "---\nname: campaign-ideation\ndescription: Turn a campaign hypothesis into a selected, versioned strategy before research or preparation begins.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Campaign ideation\n\nA good campaign starts with a clear hypothesis. This skill makes the audience, offer, and assumptions explicit before any downstream work begins.\n\n## When to use\n\nUse for a new campaign idea or a material targeting change. Run before `$campaign-setup`.\n\n## Calibrate the idea\n\n1. Restate the objective, offer, buying account, geography, buyer role, and desired response. Mark unknowns.\n2. Gather a small sample of likely fits, likely non-fits, and uncertain examples from current first-party sources.\n3. Separate required facts, soft preferences, exclusions, and discovery questions. A preference is not an exclusion.\n4. Give the operator copyable search queries and explain what each tests.\n5. Incorporate feedback. Select a strategy revision before handing off.\n\n## Save the selected strategy\n\nCapture the chosen rules and source evidence in a versioned document. Pass only the concise execution fields to `$campaign-setup`.\n\n| Input | Output |\n| --- | --- |\n| Campaign hypothesis | Calibrated audience |\n| Evidence and operator feedback | Selected strategy revision |\n| Offer and desired response | Frozen execution snapshot |\n\nSee [the handoff contract](references/handoff.md). Repository-wide instructions live in [AGENTS.md](../../../AGENTS.md).\n\n## Boundaries\n\n- Keep proposals separate from selected decisions.\n- Never invent evidence, buyer identities, or permission to launch.\n- A strategy document alone does not authorize outreach.\n\n## Return\n\nThe selected revision, evidence summary, remaining unknowns, and the next setup action.\n"
+      },
+      {
+        "path": ".agents/skills/campaign-setup/SKILL.md",
+        "content": "---\nname: campaign-setup\ndescription: Coordinate a selected strategy, bounded research, and proposed copy into a verified campaign draft.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Campaign setup\n\nThis skill owns the preparation checkpoint and brings the two downstream workstreams back together.\n\n## Freeze the input\n\nRead the exact strategy revision selected during `$campaign-ideation`. Record the audience, claims, messaging basis, destination, and authorized bounds. If the document changed, resolve the difference before proceeding.\n\n## Coordinate preparation\n\n1. Check for an existing draft and operation receipt before creating anything.\n2. Ask `$campaign-research` for eligible, source-backed recipients under the frozen criteria.\n3. Ask `$sequence-drafter` for a complete sequence grounded in the selected claims and tone.\n4. Combine the recipient and sequence proposals through the reviewed preparation capability.\n5. Read the destination back and compare it to the frozen intent.\n\n## Readback contract\n\n```json\n{\n  \"state\": \"draft\",\n  \"input_revision\": \"selected-revision\",\n  \"confirmed\": true,\n  \"sending_enabled\": false\n}\n```\n\nA successful write response is not proof that the whole draft is prepared. Confirm each step and recipient; retain partial or uncertain results for recovery.\n\n## Final operator review\n\nReturn the verified draft, selected revision, observation time, and unresolved exceptions. The operator reviews recipients, rendered messages, sender settings, and schedule before any launch.\n\n## Boundaries\n\n- Do not send, launch, schedule, or spend by inference.\n- Reconcile uncertain outcomes before retrying.\n- Keep live recipient data and credentials outside Git.\n"
+      },
+      {
+        "path": ".agents/skills/campaign-research/SKILL.md",
+        "content": "---\nname: campaign-research\ndescription: Find and qualify a bounded set of candidate accounts and sourced recipients against a frozen strategy.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Campaign research\n\nResearch a similar-account audience using the selected strategy and calibration examples. Keep evidence and uncertainty visible.\n\n## Frozen allowance\n\nAccept the selected strategy from `$campaign-setup`. Freeze candidate, query, page, time, and spend limits before discovery. Resumed work keeps the same cumulative bounds.\n\n## Find, verify, qualify\n\n1. Prefer current first-party pages and record the source and actual check time.\n2. Test identity and buying-unit fit against the selected rules.\n3. Classify each candidate as **fit**, **not fit**, or **uncertain**.\n4. For fits, find a named buyer or permitted published role inbox. Never guess an email pattern.\n5. Check duplicates, restrictions, and destination identity near the handoff.\n\n> A fit account without a sourced usable recipient is a research result, not an eligible lead.\n\n## Evidence packet\n\n| Field | Meaning |\n| --- | --- |\n| Source URL | Where the fact was observed |\n| Checked at | When it was actually checked |\n| Fit decision | Judgment under the selected rubric |\n| Unresolved facts | What still needs review |\n\n## Handoff\n\nReturn eligible recipients and sourced personalization to `$campaign-setup`. Preserve omitted discoveries and exceptions. If the request is research-only, return a reviewable result without enrollment.\n\n## Stop conditions\n\nStop at a frozen ceiling, exhausted sources, input drift, unavailable required checks, or cancellation. Unknown deliverability remains unknown.\n"
+      },
+      {
+        "path": ".agents/skills/sequence-drafter/SKILL.md",
+        "content": "---\nname: sequence-drafter\ndescription: Prepare a complete, reviewable email sequence using selected claims, tone, and source-backed personalization.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Sequence drafter\n\nTurn a selected messaging basis into a complete sequence proposal. This skill creates copy; setup owns preparation and readback.\n\n## Read the selected input\n\nRead the frozen strategy from `$campaign-setup`. Use only the selected offer, audience, allowed claims, voice, and desired response. Missing evidence stays missing.\n\n## Write the sequence\n\n1. Give each message one useful point and a proportionate ask.\n2. Ground personalization in observed account facts from `$campaign-research`.\n3. Include every subject, body, variant, delay, enabled state, and exact-case variable.\n4. Specify fallback behavior for missing personalization.\n5. Preview rendered messages and check every factual claim.\n\n## Apply feedback\n\nRevise only the passages the operator identifies. Preserve selected wording elsewhere. A material claim or strategy change needs a newly selected input.\n\n## Handoff\n\nReturn the complete sequence proposal, selected input revision, factual basis, and uncertainties to `$campaign-setup`.\n\n## Boundaries\n\n- Label proposed copy as a suggestion.\n- A draft or export is not evidence of sending.\n- Never invent familiarity, urgency, metrics, or customer proof.\n- Launch remains a manual operator decision.\n"
+      },
+      {
+        "path": ".agents/skills/campaign-ideation/references/handoff.md",
+        "content": "# Strategy handoff\n\nThe selected snapshot freezes the audience, offer, claims, restrictions, source revision, and research allowance.\n\n## Required fields\n\n- Canonical strategy reference and selected revision\n- Buying account unit and buyer role\n- Hard fit, soft preferences, exclusions, and unknowns\n- Allowed channels and claims\n- Cumulative research allowance\n\nSetup must verify this snapshot against the selected document before preparation.\n"
+      },
+      {
+        "path": "AGENTS.md",
+        "content": "# Repository instructions\n\nThis is a fictional documentation example modeled on a prospecting workflow.\n\n- Preserve the distinction between proposals, observations, and selected decisions.\n- Keep credentials and real recipient information outside Git.\n- Research, drafting, and preparation do not authorize sending.\n"
+      }
+    ],
+    "manifest": {
+      "version": 1,
+      "title": "Prospecting pipeline",
+      "description": "From a campaign hypothesis to a verified draft. Four skills, deliberate handoffs, and a human at the finish line.",
+      "steps": [
+        {
+          "id": "ideation",
+          "skill": "campaign-ideation",
+          "title": "Calibrate the campaign",
+          "phase": "01 \u00b7 Strategy",
+          "inputs": ["Campaign hypothesis", "Operator feedback"],
+          "outputs": ["Selected strategy revision", "Execution snapshot"]
+        },
+        {
+          "id": "setup",
+          "skill": "campaign-setup",
+          "title": "Freeze & coordinate",
+          "phase": "02 \u00b7 Preparation",
+          "inputs": ["Selected strategy revision"],
+          "outputs": ["Frozen criteria", "Preparation checkpoint"]
+        },
+        {
+          "id": "research",
+          "skill": "campaign-research",
+          "title": "Find the right accounts",
+          "phase": "03 \u00b7 Evidence",
+          "inputs": ["Frozen criteria", "Research allowance"],
+          "outputs": ["Eligible recipients", "Source evidence"]
+        },
+        {
+          "id": "draft",
+          "skill": "sequence-drafter",
+          "title": "Draft the sequence",
+          "phase": "03 \u00b7 Messaging",
+          "inputs": ["Selected claims & tone", "Source evidence"],
+          "outputs": ["Complete sequence proposal"]
+        },
+        {
+          "id": "readback",
+          "skill": "campaign-setup",
+          "title": "Prepare & verify",
+          "phase": "04 \u00b7 Readback",
+          "inputs": ["Eligible recipients", "Sequence proposal"],
+          "outputs": ["Verified draft", "Unresolved exceptions"]
+        },
+        {
+          "id": "review",
+          "kind": "human",
+          "title": "Review before launch",
+          "description": "The operator reviews recipients, rendered messages, sender settings, and schedule. Launch is a separate manual action.",
+          "phase": "05 \u00b7 Human decision",
+          "inputs": ["Verified draft"],
+          "outputs": ["Operator decision"]
+        }
+      ],
+      "connections": [
+        {
+          "from": "ideation",
+          "to": "setup",
+          "label": "Selected revision",
+          "type": "handoff"
+        },
+        {
+          "from": "setup",
+          "to": "research",
+          "label": "Frozen criteria",
+          "type": "handoff"
+        },
+        {
+          "from": "setup",
+          "to": "draft",
+          "label": "Claims & voice",
+          "type": "handoff"
+        },
+        {
+          "from": "research",
+          "to": "readback",
+          "label": "Eligible recipients",
+          "type": "handoff"
+        },
+        {
+          "from": "draft",
+          "to": "readback",
+          "label": "Sequence proposal",
+          "type": "handoff"
+        },
+        {
+          "from": "research",
+          "to": "draft",
+          "label": "Source evidence",
+          "type": "reference"
+        },
+        {
+          "from": "readback",
+          "to": "review",
+          "label": "Verified draft",
+          "type": "handoff"
+        }
+      ]
+    }
+  },
+  {
+    "version": 1,
+    "id": "engineering-demo",
+    "title": "Plan \u2192 build \u2192 review",
+    "description": "A small engineering loop with an explicit path for feedback.",
+    "files": [
+      {
+        "path": ".agents/skills/plan-change/SKILL.md",
+        "content": "---\nname: plan-change\ndescription: Define the problem, acceptance criteria, and a bounded implementation plan.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Plan the change\n\n## Define the outcome\n\nRestate the problem, affected users, and acceptance criteria.\n\n## Handoff\n\nPass the selected plan to `$implement-change`.\n\n## Boundaries\n\nDo not start work while consequential requirements are unknown.\n"
+      },
+      {
+        "path": ".agents/skills/implement-change/SKILL.md",
+        "content": "---\nname: implement-change\ndescription: Implement a selected plan and verify the affected behavior.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Implement the change\n\n## Read the plan\n\nConsume the plan from `$plan-change`.\n\n## Implement\n\nMake the smallest complete change. Run meaningful checks and document limitations.\n\n## Handoff\n\nPass the reviewable diff and test evidence to `$review-change`.\n"
+      },
+      {
+        "path": ".agents/skills/review-change/SKILL.md",
+        "content": "---\nname: review-change\ndescription: Review the implementation against its acceptance criteria and evidence.\nmetadata:\n  author: Skill Atlas\n  version: \"1.0\"\n---\n\n# Review the change\n\n## Review\n\nRead the selected plan and implementation. Check behavior, regressions, and test evidence.\n\n## Return\n\nReturn actionable findings. If repairs are required, hand back to `$implement-change`.\n\n## Boundaries\n\nReview does not authorize merging or deploying.\n"
+      }
+    ],
+    "manifest": {
+      "version": 1,
+      "title": "Plan \u2192 build \u2192 review",
+      "steps": [
+        {
+          "id": "plan",
+          "skill": "plan-change",
+          "phase": "01 \u00b7 Define"
+        },
+        {
+          "id": "build",
+          "skill": "implement-change",
+          "phase": "02 \u00b7 Implement"
+        },
+        {
+          "id": "review",
+          "skill": "review-change",
+          "phase": "03 \u00b7 Verify"
+        }
+      ],
+      "connections": [
+        {
+          "from": "plan",
+          "to": "build",
+          "label": "Selected plan",
+          "type": "handoff"
+        },
+        {
+          "from": "build",
+          "to": "review",
+          "label": "Diff & evidence",
+          "type": "handoff"
+        },
+        {
+          "from": "review",
+          "to": "build",
+          "label": "Actionable findings",
+          "type": "feedback"
+        }
+      ]
+    }
+  }
+]
