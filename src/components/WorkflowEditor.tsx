@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { EvidencePicker } from './EvidencePicker';
 import { Plus, Trash2, ArrowUp, ArrowDown } from 'lucide-react';
 import { validateManifest } from '../lib/workspace';
 import type { Workspace, Manifest, Step, Connection } from '../lib/types';
@@ -321,6 +322,16 @@ export function WorkflowEditor({
                   <Trash2 size={16} />
                 </button>
               </div>
+              <EvidencePicker
+                files={workspace.bundle.files}
+                connection={edge}
+                onChange={(patch) =>
+                  setDraft((d) => ({
+                    ...d,
+                    connections: d.connections.map((v, n) => (n === i ? { ...v, ...patch } : v)),
+                  }))
+                }
+              />
             </div>
           ))}
           <button

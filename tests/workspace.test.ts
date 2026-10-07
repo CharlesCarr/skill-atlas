@@ -56,7 +56,20 @@ describe('source fidelity and parsing', () => {
     );
     expect(w.authored).toBe(false);
     expect(w.connections).toEqual([
-      { from: 'one', to: 'two', type: 'reference', label: 'References in Markdown' },
+      {
+        from: 'one',
+        to: 'two',
+        type: 'reference',
+        label: 'References in Markdown',
+        evidence: [
+          {
+            path: '.agents/skills/one/SKILL.md',
+            startLine: 8,
+            endLine: 8,
+            quote: 'Ask $two. Missing $three. [Ref](missing.md)',
+          },
+        ],
+      },
     ]);
     expect(w.issues).toHaveLength(2);
   });

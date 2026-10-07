@@ -2359,3 +2359,238 @@ h4 {
 .toc {
   font-size: 11px;
 }
+
+/* Source provenance follows the quiet monochrome interface. */
+.source-status-bar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid var(--border, #e1e1e1);
+  font-size: 12px;
+  color: #666;
+}
+.source-status-bar > div {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+.source-status-bar .text-button {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  white-space: nowrap;
+}
+.revision-card {
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  padding: 22px;
+  background: #f6f6f6;
+  border: 1px solid #ddd;
+  border-radius: 12px;
+  margin: 20px 0;
+  overflow-wrap: anywhere;
+}
+.revision-card strong {
+  color: #262626;
+}
+.revision-card code {
+  font-size: 12px;
+}
+.review-badge {
+  width: fit-content;
+  border: 1px solid #bdbdbd;
+  border-radius: 4px;
+  padding: 4px 8px;
+  font-size: 12px;
+  color: #323232;
+}
+.evidence-card,
+.file-change,
+.citation-editor {
+  border: 1px solid #dedede;
+  padding: 16px;
+  border-radius: 8px;
+  margin: 12px 0;
+  min-width: 0;
+}
+.evidence-card summary,
+.file-change summary {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  cursor: pointer;
+  font-size: 13px;
+  overflow-wrap: anywhere;
+}
+.evidence-card summary::before,
+.file-change summary::before {
+  content: '+';
+  color: #777;
+}
+.evidence-card[open] summary::before,
+.file-change[open] summary::before {
+  content: '−';
+}
+.evidence-card summary strong {
+  flex: 1;
+}
+.evidence-card summary span,
+.file-change summary span {
+  font-size: 11px;
+  color: #666;
+}
+.evidence-excerpt {
+  padding: 16px 0;
+  border-top: 1px solid #e5e5e5;
+}
+.evidence-excerpt code,
+.attached-evidence code {
+  display: block;
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+.evidence-excerpt small {
+  display: block;
+  margin-top: 8px;
+  color: #777;
+}
+.source-review pre,
+.change-review pre,
+.citation-editor pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  background: #f5f5f5;
+  padding: 14px;
+  font:
+    12px/1.7 'IBM Plex Mono',
+    monospace;
+  max-height: 350px;
+  overflow: auto;
+}
+.evidence-excerpt a {
+  font-size: 12px;
+  color: #555;
+  text-decoration: underline;
+}
+.review-footer {
+  border-top: 1px solid #ddd;
+  margin-top: 24px;
+  padding-top: 16px;
+}
+.revision-comparison,
+.diff-columns {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+}
+.revision-comparison > div {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 16px;
+  background: #f5f5f5;
+  border-radius: 8px;
+  font-size: 12px;
+}
+.diff-columns > div {
+  min-width: 0;
+}
+.diff-columns h4 {
+  font-size: 12px;
+  font-weight: 600;
+}
+.workflow-choice {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding: 18px;
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  margin: 22px 0;
+}
+.workflow-choice legend {
+  padding: 0 7px;
+  font-size: 13px;
+}
+.workflow-choice label {
+  display: flex;
+  gap: 10px;
+  align-items: flex-start;
+  font-size: 13px;
+}
+.workflow-choice input {
+  accent-color: #333;
+}
+.citation-editor summary {
+  cursor: pointer;
+  font-size: 12px;
+}
+.citation-editor .field {
+  margin: 14px 0;
+}
+.attached-evidence {
+  padding: 14px 0;
+  border-bottom: 1px solid #ddd;
+}
+.attached-evidence span {
+  font-size: 11px;
+  color: #777;
+}
+.github-import {
+  margin: 22px 0;
+  padding: 20px;
+  border: 1px solid #ddd;
+  border-radius: 10px;
+}
+.github-import .field {
+  margin: 12px 0;
+}
+.source-line {
+  display: block;
+  min-height: 1.7em;
+}
+.source-line.highlighted {
+  background: #e4e4e4;
+  box-shadow: inset 3px 0 #555;
+}
+.line-number {
+  display: inline-block;
+  user-select: none;
+  min-width: 3em;
+  text-align: right;
+  padding-right: 1em;
+  color: #999;
+}
+@media (max-width: 700px) {
+  .source-status-bar {
+    align-items: flex-start;
+  }
+  .source-status-bar > div {
+    gap: 7px;
+  }
+  .revision-comparison,
+  .diff-columns {
+    grid-template-columns: 1fr;
+  }
+  .evidence-card summary,
+  .file-change summary {
+    flex-wrap: wrap;
+  }
+  .source-review > .button-group {
+    flex-wrap: wrap;
+  }
+  .revision-card {
+    padding: 16px;
+  }
+  .github-import {
+    padding: 16px;
+  }
+}
+
+.source-review .text-button {
+  color: #555;
+}

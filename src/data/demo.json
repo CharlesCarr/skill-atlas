@@ -90,43 +90,99 @@
           "from": "ideation",
           "to": "setup",
           "label": "Selected revision",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/campaign-ideation/SKILL.md",
+              "startLine": 27,
+              "endLine": 27,
+              "quote": "Capture the chosen rules and source evidence in a versioned document. Pass only the concise execution fields to `$campaign-setup`."
+            }
+          ]
         },
         {
           "from": "setup",
           "to": "research",
           "label": "Frozen criteria",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/campaign-setup/SKILL.md",
+              "startLine": 20,
+              "endLine": 20,
+              "quote": "2. Ask `$campaign-research` for eligible, source-backed recipients under the frozen criteria."
+            }
+          ]
         },
         {
           "from": "setup",
           "to": "draft",
           "label": "Claims & voice",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/campaign-setup/SKILL.md",
+              "startLine": 21,
+              "endLine": 21,
+              "quote": "3. Ask `$sequence-drafter` for a complete sequence grounded in the selected claims and tone."
+            }
+          ]
         },
         {
           "from": "research",
           "to": "readback",
           "label": "Eligible recipients",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/campaign-research/SKILL.md",
+              "startLine": 38,
+              "endLine": 38,
+              "quote": "Return eligible recipients and sourced personalization to `$campaign-setup`. Preserve omitted discoveries and exceptions. If the request is research-only, return a reviewable result without enrollment."
+            }
+          ]
         },
         {
           "from": "draft",
           "to": "readback",
           "label": "Sequence proposal",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/sequence-drafter/SKILL.md",
+              "startLine": 31,
+              "endLine": 31,
+              "quote": "Return the complete sequence proposal, selected input revision, factual basis, and uncertainties to `$campaign-setup`."
+            }
+          ]
         },
         {
           "from": "research",
           "to": "draft",
           "label": "Source evidence",
-          "type": "reference"
+          "type": "reference",
+          "evidence": [
+            {
+              "path": ".agents/skills/sequence-drafter/SKILL.md",
+              "startLine": 20,
+              "endLine": 20,
+              "quote": "2. Ground personalization in observed account facts from `$campaign-research`."
+            }
+          ]
         },
         {
           "from": "readback",
           "to": "review",
           "label": "Verified draft",
-          "type": "handoff"
+          "type": "handoff",
+          "evidence": [
+            {
+              "path": ".agents/skills/campaign-setup/SKILL.md",
+              "startLine": 40,
+              "endLine": 40,
+              "quote": "Return the verified draft, selected revision, observation time, and unresolved exceptions. The operator reviews recipients, rendered messages, sender settings, and schedule before any launch."
+            }
+          ]
         }
       ]
     }

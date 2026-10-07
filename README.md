@@ -20,6 +20,9 @@ Agent workflows often live across SKILL.md files, repository instructions, and r
 - **Interactive workflow maps:** pan, zoom, drag nodes, switch direction, hide reference edges, and inspect a step. Branches, feedback, repeated skills, and human decisions are supported.
 - **Full skill reading:** Markdown headings, lists, code, tables, task lists, frontmatter, and original source. Internal references open the imported document; missing references are reported.
 - **Workflow editing:** define steps, phases, inputs, outputs, and named handoffs in the visual editor or versioned JSON manifest. Changes persist in the browser.
+- **Recorded repository snapshots:** import public GitHub repositories at one resolved commit, or record local Git HEAD and source changes through the CLI.
+- **Source review:** preview added, changed, and removed files before applying an update; retain your workflow overlay or explicitly use the incoming definition.
+- **Connection evidence:** click a connection to inspect exact source excerpts and lines. Changed, missing, moved, ambiguous, and uncited evidence remain visible. Human review becomes stale after source or workflow changes.
 - **Folder and bundle import:** read Codex skill directories, AGENTS.md, agent interface YAML, and supporting text resources. No account, backend, or AI API is needed.
 - **Portable sharing:** self-contained offline HTML, vector SVG diagrams, editable workspace bundles, and workflow manifests.
 - **Source checks:** malformed/duplicate skills, unresolved mentions, missing files, invalid manifests, and import limits are surfaced explicitly.
@@ -56,7 +59,23 @@ npm run import:skills -- /path/to/repository \
   --manifest /path/to/workflow.yaml
 ```
 
-Imports are snapshots. Reimport after the source changes, or restore a portable bundle. No source repository is modified. Browser edits change the current manifest overlay; download the manifest to deliberately update the source repository.
+Imports are snapshots. Re-run the CLI with the same folder and name, then reload the app: an updated local snapshot is offered for comparison rather than overwriting browser edits. You can also use **Source review → Compare updated folder or bundle**. Folder-picker imports cannot inspect Git metadata and are labeled unversioned. No source repository is modified. Browser edits change the current manifest overlay; download the manifest to deliberately update the source repository.
+
+## Keep the map trustworthy
+
+**Import a public repository:** choose **Import a workflow → Import a public GitHub repository**. Enter `owner/repository`, a branch/tag/commit (default `HEAD`), and an optional subfolder. To try this project’s fictional example, use `CharlesCarr/skill-atlas`, `main`, and `examples/prospecting`.
+
+The app resolves the revision once, reads its immutable tree and blobs, verifies Git blob IDs, and records the full commit, selected ref, subfolder, and import time. It rejects incomplete GitHub trees, symlinks, invalid UTF-8, oversized imports, and failed reads. GitHub’s unauthenticated API limits apply. There is no token field; import a local clone for private repositories.
+
+**Update deliberately:** open **Source review → Check GitHub for changes**, or compare an updated local folder/bundle. Inspect the before/after source text and affected cited connections. Keep your existing workflow and citations, or select the incoming definition. Nothing is replaced until **Apply source update**. A retained workflow pointing to a removed skill blocks application; use the incoming definition/reference map or correct the workflow first. Comparing another repository or subfolder is blocked when both snapshots carry repository identities.
+
+**Cite the instructions:** generated reference edges include the actual Markdown mention/link and its source line, including reference-link definitions. Authored handoffs are never automatically certified by a mention. Open **Edit workflow**, expand a connection’s **Source evidence**, select a source file and inclusive line range, and attach the excerpt. Save/export the manifest to version citations beside the skills. The prospecting example contains seven handoffs/references cited against its fictional sources.
+
+Evidence stores `path`, `startLine`, `endLine`, and the exact excerpt. A unique unchanged excerpt can be relocated after lines move; changed/removed or ambiguous excerpts require attention. Clean Git snapshots offer immutable GitHub line links when a GitHub origin is known. Local changes never get a misleading link to unchanged committed text.
+
+**Review the whole workflow:** use **Mark snapshot reviewed** after checking the instructions and handoffs. A SHA-256 fingerprint covers all imported source text and the authored manifest. The review remains valid across reloads and exports, but source or workflow edits produce **Needs review**. Broken citations block marking reviewed; uncited relationships remain labeled even after human review. This is a local human acknowledgment, not a signed attestation, skill evaluation, or execution trace.
+
+HTML exports carry the recorded revision, review status, citations, source line anchors, and any evidence problems. Portable bundles retain source metadata and review fingerprints. Updates are checked on demand; there is no background polling, filesystem watcher, OAuth integration, repository write-back, or shared review identity.
 
 ## References versus workflows
 

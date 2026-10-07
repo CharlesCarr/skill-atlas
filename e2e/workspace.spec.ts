@@ -198,3 +198,167 @@ test('storage failures keep the app and export available', async ({ page }) => {
   ]);
   expect(download.suggestedFilename()).toContain('.atlas.json');
 });
+
+test('source evidence opens exact lines and human review invalidates after a workflow edit', async ({
+  page,
+}, info) => {
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await expect(page.getByText('7 / 7 cited')).toBeVisible();
+  const edge = page.locator('.evidence-card').first();
+  await edge.locator('summary').click();
+  await expect(edge).toContainText('Exact excerpt matches imported source');
+  await edge.getByRole('button', { name: 'Open source lines' }).click();
+  await expect(page.locator('.source-line.highlighted')).toContainText(
+    'Pass only the concise execution fields',
+  );
+  await page.getByLabel('Close inspector').click();
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await page.getByRole('button', { name: 'Mark snapshot reviewed' }).click();
+  await expect(page.locator('.review-badge')).toHaveText('Reviewed snapshot');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.locator('.source-status-bar')).toContainText('Reviewed snapshot');
+  await page.getByRole('button', { name: 'Edit workflow' }).click();
+  await page.getByLabel('Workflow title', { exact: true }).fill('Updated workflow');
+  await page.getByRole('button', { name: 'Save workflow', exact: true }).click();
+  await expect(page.locator('.source-status-bar')).toContainText('Needs review');
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBe(true);
+  await page.screenshot({
+    path: `test-results/${info.project.name}-source-review.png`,
+    fullPage: true,
+  });
+});
+
+test('source refresh previews changes, cancels safely, preserves overlay and flags stale citations', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await page.getByRole('button', { name: 'Mark snapshot reviewed' }).click();
+  await expect(page.locator('.review-badge')).toHaveText('Reviewed snapshot');
+  const updated = structuredClone(demo[0]);
+  const path = updated.manifest.connections[0].evidence[0].path;
+  const quote = updated.manifest.connections[0].evidence[0].quote;
+  updated.files.find((f: { path: string }) => f.path === path).content = updated.files
+    .find((f: { path: string }) => f.path === path)
+    .content.replace(quote, 'The handoff instruction has changed.');
+  updated.manifest.title = 'Incoming workflow';
+  async function stage() {
+    await page.getByRole('button', { name: 'Compare updated folder or bundle' }).click();
+    await page.getByLabel('Import workflow bundle').setInputFiles({
+      name: 'updated.atlas.json',
+      mimeType: 'application/json',
+      buffer: Buffer.from(JSON.stringify(updated)),
+    });
+    await expect(page.getByRole('heading', { name: 'Review source changes.' })).toBeVisible();
+    await expect(page.getByText('1 source file changes')).toBeVisible();
+  }
+  await stage();
+  await page.keyboard.press('Escape');
+  await expect(
+    page.getByRole('heading', { name: 'Prospecting pipeline', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.source-status-bar')).toContainText('Reviewed snapshot');
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await stage();
+  await page.getByRole('button', { name: 'Apply source update' }).click();
+  await expect(
+    page.getByRole('heading', { name: 'Prospecting pipeline', exact: true }),
+  ).toBeVisible();
+  await expect(page.locator('.source-status-bar')).toContainText('Needs review');
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await expect(page.getByRole('button', { name: 'Mark snapshot reviewed' })).toBeDisabled();
+  await expect(page.locator('.evidence-card').first()).toContainText('Evidence needs attention');
+  await page.waitForTimeout(500);
+  await page.reload();
+  await expect(page.locator('.source-status-bar')).toContainText('Needs review');
+});
+
+test('public GitHub import pins a commit and refresh waits for explicit application', async ({
+  page,
+}) => {
+  const { createHash } = await import('node:crypto');
+  let revision = 0;
+  const contents = [
+    '---\nname: example\n---\n# Example\nOriginal instructions.\n',
+    '---\nname: example\n---\n# Example\nChanged instructions.\n',
+  ];
+  const blobs = contents.map((content) => {
+    const bytes = Buffer.from(content);
+    return {
+      content,
+      sha: createHash('sha1').update(`blob ${bytes.length}\0`).update(bytes).digest('hex'),
+      size: bytes.length,
+    };
+  });
+  await page.route('https://api.github.com/repos/fictional/skills/**', async (route) => {
+    const url = route.request().url();
+    if (url.includes('/commits/')) {
+      await route.fulfill({
+        json: {
+          sha: (revision ? 'b' : 'a').repeat(40),
+          commit: { tree: { sha: (revision ? 'd' : 'c').repeat(40) } },
+        },
+      });
+      return;
+    }
+    if (url.includes('/git/trees/')) {
+      const blob = blobs[revision];
+      await route.fulfill({
+        json: {
+          truncated: false,
+          tree: [
+            { type: 'blob', mode: '100644', path: 'SKILL.md', sha: blob.sha, size: blob.size },
+          ],
+        },
+      });
+      return;
+    }
+    const blob = blobs.find((b) => url.endsWith(b.sha))!;
+    await route.fulfill({
+      json: {
+        encoding: 'base64',
+        sha: blob.sha,
+        content: Buffer.from(blob.content).toString('base64'),
+      },
+    });
+  });
+  if (await page.getByLabel('Open navigation').isVisible())
+    await page.getByLabel('Open navigation').click();
+  await page.getByRole('button', { name: 'Import a workflow', exact: true }).first().click();
+  await page.getByLabel('GitHub repository', { exact: true }).fill('fictional/skills');
+  await page.getByLabel('Branch, tag or commit').fill('main');
+  await page.getByRole('button', { name: 'Import from GitHub' }).click();
+  await expect(page.getByRole('heading', { name: 'skills', exact: true })).toBeVisible();
+  await expect(page.locator('.source-status-bar')).toContainText('aaaaaaaaaaaa');
+  revision = 1;
+  await page.getByRole('button', { name: 'Source review', exact: true }).click();
+  await page.getByRole('button', { name: 'Check GitHub for changes' }).click();
+  await expect(page.getByRole('heading', { name: 'Review source changes.' })).toBeVisible();
+  await expect(page.locator('.revision-comparison')).toContainText('bbbbbbbbbbbb');
+  await expect(page.locator('.source-status-bar')).toContainText('aaaaaaaaaaaa');
+  await page.getByRole('button', { name: 'Apply source update' }).click();
+  await expect(page.locator('.source-status-bar')).toContainText('bbbbbbbbbbbb');
+});
+
+test('workflow editor attaches exact evidence and exports it with the manifest', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Edit workflow' }).click();
+  const connection = page.locator('.edit-connection').first();
+  await connection.locator('.citation-editor > summary').click();
+  await connection.getByLabel('Evidence file', { exact: true }).selectOption(demo[0].files[0].path);
+  await connection.getByLabel('Start line', { exact: true }).fill('9');
+  await connection.getByLabel('End line', { exact: true }).fill('9');
+  await connection.getByRole('button', { name: 'Attach source excerpt' }).click();
+  await expect(connection.locator('.attached-evidence')).toHaveCount(2);
+  await page.getByRole('button', { name: 'Save workflow', exact: true }).click();
+  await page.getByRole('button', { name: 'Share & export' }).click();
+  const [download] = await Promise.all([
+    page.waitForEvent('download'),
+    page.getByRole('button', { name: 'Workflow manifest', exact: false }).click(),
+  ]);
+  const manifest = JSON.parse(await readFile((await download.path())!, 'utf8'));
+  expect(manifest.connections[0].evidence).toHaveLength(2);
+  expect(manifest.connections[0].evidence[1].quote).toBe(demo[0].files[0].content.split('\n')[8]);
+});

@@ -3,6 +3,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { layout, NODE_W, NODE_H, tones, toneColors, type Direction } from './layout';
 import { issuesForExport, resolvePath } from './workspace';
+import { connectionStatus, evidenceUrl, resolveEvidence } from './trust';
 import type { Workspace } from './types';
 export const escape = (s: string) =>
   s.replace(
@@ -39,7 +40,7 @@ export function diagramSvg(w: Workspace, direction: Direction = 'LR') {
   const width = Math.max(...nodes.map((n) => n.x + NODE_W)) + 60,
     height = Math.max(...nodes.map((n) => n.y + NODE_H)) + 100;
   const edges = w.connections
-    .map((e) => {
+    .map((e, i) => {
       const a = byId.get(e.from)!,
         b = byId.get(e.to)!;
       let sx = a.x + NODE_W,
@@ -56,7 +57,7 @@ export function diagramSvg(w: Workspace, direction: Direction = 'LR') {
         direction === 'LR'
           ? `C ${sx + 50},${sy} ${tx - 50},${ty} ${tx},${ty}`
           : `C ${sx},${sy + 50} ${tx},${ty - 50} ${tx},${ty}`;
-      return `<path d="M ${sx},${sy} ${curve}" fill="none" stroke="#9a9a9a" stroke-width="1.5" ${e.type !== 'handoff' ? 'stroke-dasharray="5 5"' : ''} marker-end="url(#arrow)"/><text x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 8}" text-anchor="middle" font-size="10" fill="#616161">${escape(e.label)}</text>`;
+      return `<a href="#connection-${i}" aria-label="${escape(e.label)}"><title>${escape(connectionStatus(w.bundle.files, e))}</title><path d="M ${sx},${sy} ${curve}" fill="none" stroke="#9a9a9a" stroke-width="1.5" ${e.type !== 'handoff' ? 'stroke-dasharray="5 5"' : ''} marker-end="url(#arrow)"/><text x="${(sx + tx) / 2}" y="${(sy + ty) / 2 - 8}" text-anchor="middle" font-size="10" fill="#616161">${escape(e.label)}</text></a>`;
     })
     .join('');
   const cards = nodes
@@ -83,7 +84,13 @@ export function diagramSvg(w: Workspace, direction: Direction = 'LR') {
     .join('');
   return `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${width} ${height}" width="${width}" height="${height}" role="img" aria-label="${escape(w.bundle.title)}"><title>${escape(w.bundle.title)}</title><rect width="100%" height="100%" fill="#f6f6f6"/><defs><marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M 0 0 L 10 5 L 0 10 z" fill="#9a9a9a"/></marker></defs><g font-family="sans-serif">${edges}${cards}</g><text x="30" y="${height - 25}" font-family="sans-serif" font-size="11" fill="#6f6f6f">Skill Atlas · ${w.authored ? 'Authored workflow' : 'References only; no execution order inferred'} · Solid: handoff · Dashed: reference / feedback</text></svg>`;
 }
-export function snapshotHtml(w: Workspace, direction: Direction = 'LR') {
+export function snapshotHtml(
+  w: Workspace,
+  direction: Direction = 'LR',
+  reviewLabel = w.bundle.review
+    ? 'Review record present; check current content in Skill Atlas'
+    : 'Not reviewed',
+) {
   const fileIds = new Map(w.bundle.files.map((f, i) => [f.path, `source-${i}`]));
   function markdown(body: string, path: string) {
     return renderToStaticMarkup(
@@ -119,15 +126,36 @@ export function snapshotHtml(w: Workspace, direction: Direction = 'LR') {
       return `<article id="step-${escape(encodeURIComponent(s.id))}"><div class="eyebrow">Step ${i + 1} · ${escape(s.phase ?? 'Workflow')}</div><h2>${escape(s.title ?? skill?.title ?? s.id)}</h2><p>${escape(s.description ?? skill?.description ?? '')}</p><div class="io">${s.inputs?.length ? `<div><b>Inputs</b><ul>${s.inputs.map((v) => `<li>${escape(v)}</li>`).join('')}</ul></div>` : ''}${s.outputs?.length ? `<div><b>Outputs</b><ul>${s.outputs.map((v) => `<li>${escape(v)}</li>`).join('')}</ul></div>` : ''}</div>${skill ? `<a href="#${fileIds.get(skill.path)}">Read ${escape(skill.id)} →</a>` : '<p>Human decision · no skill is executed.</p>'}</article>`;
     })
     .join('');
+  const source = w.bundle.source;
+  const provenance = `<article><div class="eyebrow">Source snapshot</div><p>${escape(source?.repository ?? 'Local files / example')}<br>${escape(source?.commit ? source.commit + (source.dirty ? ' + local source changes' : '') : 'No Git revision recorded')}<br>${escape(source?.directory ? 'Subfolder: ' + source.directory : '')}</p><p>${escape(reviewLabel)}${w.bundle.review ? '<br>Last human review: ' + escape(w.bundle.review.reviewedAt) : ''}${source ? '<br>Imported: ' + escape(source.importedAt) : ''}</p><p>Excerpts matching source do not prove a handoff is correct. This document records intended behavior, not observed execution.</p></article>`;
+  const connections = w.connections
+    .map(
+      (edge, i) =>
+        `<article id="connection-${i}"><div class="eyebrow">${escape(edge.from)} → ${escape(edge.to)} · ${escape(edge.type)}</div><h3>${escape(edge.label)}</h3><p>${escape(connectionStatus(w.bundle.files, edge))}</p>${
+          edge.evidence?.length
+            ? edge.evidence
+                .map((e) => {
+                  const result = resolveEvidence(w.bundle.files, e),
+                    url = evidenceUrl(w.bundle, e);
+                  return `<p>${escape(e.path)}:L${result.startLine ?? e.startLine}–L${result.endLine ?? e.endLine} · ${escape(result.status)}</p><pre>${escape(e.quote)}</pre>${fileIds.has(e.path) ? '<a href="#' + fileIds.get(e.path) + (result.startLine ? '-L' + result.startLine : '') + '">Open original source lines</a>' : ''}${url ? ' · <a href="' + escape(url) + '" target="_blank" rel="noopener noreferrer">View at recorded commit</a>' : ''}`;
+                })
+                .join('')
+            : '<p>Authored relationship without a source citation.</p>'
+        }</article>`,
+    )
+    .join('');
   const docs = w.bundle.files
     .map((f) => {
       const skill = w.skills.find((s) => s.path === f.path);
-      return `<article id="${fileIds.get(f.path)}"><div class="eyebrow">${escape(f.path)}</div>${skill ? `<h2>${escape(skill.title)}</h2><p>${escape(skill.description)}</p>` : ''}<div class="markdown">${/\.md$/i.test(f.path) ? markdown(skill?.body ?? f.content, f.path) : `<pre>${escape(f.content)}</pre>`}</div><details><summary>Original source · preserved verbatim</summary><pre>${escape(f.content)}</pre></details></article>`;
+      return `<article id="${fileIds.get(f.path)}"><div class="eyebrow">${escape(f.path)}</div>${skill ? `<h2>${escape(skill.title)}</h2><p>${escape(skill.description)}</p>` : ''}<div class="markdown">${/\.md$/i.test(f.path) ? markdown(skill?.body ?? f.content, f.path) : `<pre>${escape(f.content)}</pre>`}</div><details><summary>Original source · preserved verbatim</summary><pre>${f.content
+        .split(/(?<=\n)/)
+        .map((line, n) => `<span id="${fileIds.get(f.path)}-L${n + 1}">${escape(line)}</span>`)
+        .join('')}</pre></details></article>`;
     })
     .join('');
   const issues = w.issues.length
     ? `<details><summary>Source issues (${w.issues.length})</summary><ul>${w.issues.map((i) => `<li>${escape(i.path ?? '')}: ${escape(i.message)}</li>`).join('')}</ul></details>`
     : '';
   return `<!doctype html><html lang="en"><head><meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="referrer" content="no-referrer"><title>${escape(w.bundle.title)} · Skill Atlas</title><style>
-*{box-sizing:border-box}body{margin:0;background:#f6f6f6;color:#323232;font:15px/1.7 ui-sans-serif,sans-serif}header,main,footer{max-width:1120px;margin:auto;padding:32px}header{padding-top:60px}h1{font-size:44px;letter-spacing:-2px;line-height:1.2}h2{font-size:25px;letter-spacing:-.6px}h3{font-size:18px}a{color:#5f5f5f}article{background:white;border:1px solid #e1e1e1;padding:36px;border-radius:16px;margin:24px 0;scroll-margin-top:20px}.eyebrow{font:11px/1.5 monospace;text-transform:uppercase;color:#6e6e6e;overflow-wrap:anywhere}nav{display:flex;gap:18px;flex-wrap:wrap}svg{width:100%;height:auto;min-width:650px}.diagram{overflow:auto;border:1px solid #e1e1e1;border-radius:16px}.io{display:flex;gap:60px}pre{background:#f1f1f1;padding:18px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}code{font-family:monospace}table{border-collapse:collapse;display:block;overflow:auto}td,th{padding:10px;border:1px solid #e1e1e1}blockquote{border-left:3px solid #9b9b9b;padding-left:20px;color:#656565}summary{cursor:pointer}details{margin:20px 0}p,li{overflow-wrap:anywhere}@media(max-width:600px){header,main,footer{padding:20px}article{padding:22px}h1{font-size:34px}.io{flex-wrap:wrap;gap:15px}}@media print{details{display:block}article{break-inside:avoid}.diagram svg{min-width:0}body{background:white}}</style></head><body><header><div class="eyebrow">Skill Atlas / Workflow snapshot</div><h1>${escape(w.bundle.title)}</h1><p>${escape(w.bundle.description)}</p><p>${w.skills.length} skills · ${w.steps.length} steps · ${w.authored ? 'Authored workflow' : 'Markdown references; no execution order inferred'}<br>${escape(issuesForExport(w))}</p><nav><a href="#map">Workflow map</a><a href="#steps">Step by step</a><a href="#documents">Source documents</a></nav>${issues}</header><main><div id="map" class="diagram">${diagramSvg(w, direction)}</div><h2 id="steps">Step by step</h2>${stepHtml}<h2 id="documents">Source documents</h2>${docs}</main><footer>Created with Skill Atlas · A read-only documentation snapshot · No external assets or scripts · ${new Date().toISOString().slice(0, 10)}</footer></body></html>`;
+*{box-sizing:border-box}body{margin:0;background:#f6f6f6;color:#323232;font:15px/1.7 ui-sans-serif,sans-serif}header,main,footer{max-width:1120px;margin:auto;padding:32px}header{padding-top:60px}h1{font-size:44px;letter-spacing:-2px;line-height:1.2}h2{font-size:25px;letter-spacing:-.6px}h3{font-size:18px}a{color:#5f5f5f}article{background:white;border:1px solid #e1e1e1;padding:36px;border-radius:16px;margin:24px 0;scroll-margin-top:20px}.eyebrow{font:11px/1.5 monospace;text-transform:uppercase;color:#6e6e6e;overflow-wrap:anywhere}nav{display:flex;gap:18px;flex-wrap:wrap}svg{width:100%;height:auto;min-width:650px}.diagram{overflow:auto;border:1px solid #e1e1e1;border-radius:16px}.io{display:flex;gap:60px}pre{background:#f1f1f1;padding:18px;white-space:pre-wrap;overflow-wrap:anywhere;font-size:12px}code{font-family:monospace}table{border-collapse:collapse;display:block;overflow:auto}td,th{padding:10px;border:1px solid #e1e1e1}blockquote{border-left:3px solid #9b9b9b;padding-left:20px;color:#656565}summary{cursor:pointer}details{margin:20px 0}p,li{overflow-wrap:anywhere}@media(max-width:600px){header,main,footer{padding:20px}article{padding:22px}h1{font-size:34px}.io{flex-wrap:wrap;gap:15px}}@media print{details{display:block}article{break-inside:avoid}.diagram svg{min-width:0}body{background:white}}</style></head><body><header><div class="eyebrow">Skill Atlas / Workflow snapshot</div><h1>${escape(w.bundle.title)}</h1><p>${escape(w.bundle.description)}</p><p>${w.skills.length} skills · ${w.steps.length} steps · ${w.authored ? 'Authored workflow' : 'Markdown references; no execution order inferred'}<br>${escape(issuesForExport(w))}</p><nav><a href="#map">Workflow map</a><a href="#steps">Step by step</a><a href="#connections">Connection evidence</a><a href="#documents">Source documents</a></nav>${issues}</header><main><div id="map" class="diagram">${diagramSvg(w, direction)}</div>${provenance}<h2 id="steps">Step by step</h2>${stepHtml}<h2 id="connections">Connection evidence</h2>${connections}<h2 id="documents">Source documents</h2>${docs}</main><footer>Created with Skill Atlas · A read-only documentation snapshot · No external assets or scripts · ${new Date().toISOString().slice(0, 10)}</footer></body></html>`;
 }

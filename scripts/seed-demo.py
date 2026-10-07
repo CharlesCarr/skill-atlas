@@ -160,6 +160,13 @@ manifest = {'version':1,'title':'Prospecting pipeline','description':'From a cam
 {'from':'draft','to':'readback','label':'Sequence proposal','type':'handoff'},
 {'from':'research','to':'draft','label':'Source evidence','type':'reference'},
 {'from':'readback','to':'review','label':'Verified draft','type':'handoff'}]}
+# Keep the sample graph evidence tied to existing fictional instructions.
+anchors = [('campaign-ideation', 'Capture the chosen rules'), ('campaign-setup', '2. Ask'), ('campaign-setup', '3. Ask'), ('campaign-research', 'Return eligible recipients'), ('sequence-drafter', 'Return the complete sequence'), ('sequence-drafter', '2. Ground personalization'), ('campaign-setup', 'Return the verified draft')]
+for edge, (name, prefix) in zip(manifest['connections'], anchors):
+    source = next(f for f in files if f['path'] == f'.agents/skills/{name}/SKILL.md')
+    lines = source['content'].splitlines()
+    line = next(i for i, text in enumerate(lines, 1) if text.startswith(prefix))
+    edge['evidence'] = [{'path': source['path'], 'startLine': line, 'endLine': line, 'quote': lines[line - 1]}]
 (root/'examples/prospecting').mkdir(parents=True,exist_ok=True)
 for f in files:
     p=root/'examples/prospecting'/f['path']; p.parent.mkdir(parents=True,exist_ok=True); p.write_text(f['content'])

@@ -26,6 +26,7 @@ import {
   EyeOff,
 } from 'lucide-react';
 import { layout, tones, toneColors, type Direction } from '../lib/layout';
+import { connectionStatus } from '../lib/trust';
 import type { Workspace } from '../lib/types';
 import '@xyflow/react/dist/style.css';
 type SkillNodeData = {
@@ -76,12 +77,14 @@ export function WorkflowMap({
   workspace,
   selected,
   onSelect,
+  onConnection,
   direction,
   setDirection,
 }: {
   workspace: Workspace;
   selected: string;
   onSelect: (id: string) => void;
+  onConnection: (index: number) => void;
   direction: Direction;
   setDirection: (v: Direction) => void;
 }) {
@@ -113,6 +116,9 @@ export function WorkflowMap({
         target: e.to,
         label: e.label,
         type: 'smoothstep',
+        data: { connectionIndex: workspace.connections.indexOf(e) },
+        ariaLabel: `${e.label}. ${connectionStatus(workspace.bundle.files, e)}. Open source evidence.`,
+        interactionWidth: 24,
         style: {
           stroke: e.type === 'handoff' ? '#a3a3a3' : e.type === 'feedback' ? '#8e8e8e' : '#b3b3b3',
           strokeWidth: 1.5,
@@ -189,6 +195,7 @@ export function WorkflowMap({
         onNodesChange={onNodesChange}
         onEdgesChange={onEdgesChange}
         onNodeClick={(_, n) => onSelect(n.id)}
+        onEdgeClick={(_, e) => onConnection(Number(e.data?.connectionIndex))}
         onInit={init}
         fitView
         minZoom={0.18}
@@ -217,7 +224,7 @@ export function WorkflowMap({
           <i className="line-dashed" />
           Reference / feedback
         </span>
-        <span className="legend-hint">Drag to explore · click a skill to read</span>
+        <span className="legend-hint">Click a skill to read · click a connection for evidence</span>
       </div>
     </section>
   );

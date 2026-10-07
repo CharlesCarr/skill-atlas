@@ -9,11 +9,23 @@ export type Step = {
   inputs?: string[];
   outputs?: string[];
 };
+export type Evidence = { path: string; startLine: number; endLine: number; quote: string };
+export type SourceSnapshot = {
+  kind: 'github' | 'git' | 'folder';
+  repository?: string;
+  commit?: string;
+  ref?: string;
+  directory?: string;
+  dirty?: boolean;
+  importedAt: string;
+};
+export type Review = { fingerprint: string; reviewedAt: string };
 export type Connection = {
   from: string;
   to: string;
   label: string;
   type: 'handoff' | 'reference' | 'feedback';
+  evidence?: Evidence[];
 };
 export type Manifest = {
   version: 1;
@@ -29,6 +41,8 @@ export type Bundle = {
   description: string;
   files: SourceFile[];
   manifest?: Manifest;
+  source?: SourceSnapshot;
+  review?: Review;
 };
 export type Section = { title: string; depth: number; line: number };
 export type Skill = {
@@ -41,7 +55,8 @@ export type Skill = {
   frontmatter: Record<string, unknown>;
   sections: Section[];
   mentions: string[];
-  links: { label: string; href: string; line: number }[];
+  invocations: { target: string; evidence: Evidence }[];
+  links: { label: string; href: string; line: number; evidence: Evidence[] }[];
 };
 export type Issue = { severity: 'warning' | 'error'; message: string; path?: string };
 export type Workspace = {

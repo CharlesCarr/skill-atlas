@@ -30,6 +30,15 @@ import {
 import { Markdown } from './components/Markdown';
 import { Modal } from './components/Modal';
 import { WorkflowEditor } from './components/WorkflowEditor';
+import { SourceReview, ChangeReview } from './components/SourceReview';
+import { GithubImport } from './components/GithubImport';
+import {
+  fingerprint,
+  reviewStatus,
+  resolveEvidence,
+  sourceLines,
+  compareSources,
+} from './lib/trust';
 import {
   bundleFromFiles,
   buildWorkspace,
@@ -39,7 +48,7 @@ import {
   LIMITS,
 } from './lib/workspace';
 import { loadSaved, saveBundles } from './lib/storage';
-import type { Bundle, Manifest, SourceFile } from './lib/types';
+import type { Bundle, Manifest, SourceFile, Evidence } from './lib/types';
 import type { Direction } from './lib/layout';
 import demo from './data/demo.json';
 const WorkflowMap = lazy(() =>
@@ -47,7 +56,7 @@ const WorkflowMap = lazy(() =>
 );
 const defaults = demo as Bundle[];
 type View = 'map' | 'walkthrough' | 'library' | 'sources';
-type Dialog = 'import' | 'export' | 'edit' | 'help' | 'remove' | null;
+type Dialog = 'import' | 'export' | 'edit' | 'help' | 'remove' | 'review' | 'changes' | null;
 const viewNames: Record<View, string> = {
   map: 'Workflow map',
   walkthrough: 'Step by step',
@@ -70,6 +79,13 @@ export default function App() {
   const [query, setQuery] = useState('');
   const [dialog, setDialog] = useState<Dialog>(null);
   const [error, setError] = useState('');
+  const [reviewState, setReviewState] = useState('Checking review…');
+  const [focusedConnection, setFocusedConnection] = useState<number>();
+  const [updateTarget, setUpdateTarget] = useState<string>();
+  const [localSnapshots, setLocalSnapshots] = useState<Bundle[]>([]);
+  const [pending, setPending] = useState<{ before: Bundle; incoming: Bundle }>();
+  const [docRange, setDocRange] = useState<{ start: number; end: number }>();
+  const githubRequest = useRef<AbortController | null>(null);
   const [notice, setNotice] = useState(savedAtStart.error ?? '');
   const [storageError, setStorageError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -91,6 +107,26 @@ export default function App() {
   }, []);
   const bundle = bundles.find((b) => b.id === activeId) ?? bundles[0];
   const workspace = useMemo(() => buildWorkspace(bundle), [bundle]);
+  useEffect(() => {
+    let current = true;
+    setReviewState('Checking review…');
+    reviewStatus(bundle)
+      .then((status) => {
+        if (current) setReviewState(status);
+      })
+      .catch(() => {
+        if (current) setReviewState('Review unavailable');
+      });
+    return () => {
+      current = false;
+    };
+  }, [bundle]);
+  useEffect(() => () => githubRequest.current?.abort(), []);
+  const localUpdate = localSnapshots.find(
+    (b) =>
+      b.id === bundle.id &&
+      (compareSources(bundle, b).length > 0 || b.source?.commit !== bundle.source?.commit),
+  );
   const step = workspace.steps.find((s) => s.id === selected);
   const skill = workspace.skills.find((s) => s.path === docPath || s.id === step?.skill);
   const agentFile = skill
@@ -131,6 +167,7 @@ export default function App() {
         const imports = data.map(validateBundle);
         imports.forEach(buildWorkspace);
         if (!cancelled && imports.length) {
+          setLocalSnapshots(imports);
           setBundles((prev) => [
             ...prev,
             ...imports.filter((v) => !prev.some((b) => b.id === v.id)),
@@ -149,6 +186,7 @@ export default function App() {
     setActiveId(id);
     setSelected('');
     setDocPath('');
+    setDocRange(undefined);
     setRaw(false);
     setQuery('');
     setMobileNav(false);
@@ -159,6 +197,7 @@ export default function App() {
     );
   }
   function selectStep(id: string) {
+    setDocRange(undefined);
     setSelected(id);
     setDocPath('');
     setRaw(false);
@@ -171,6 +210,7 @@ export default function App() {
       return;
     }
     setDocPath(path);
+    setDocRange(undefined);
     setSelected('');
     setRaw(false);
     if (fragment)
@@ -195,11 +235,98 @@ export default function App() {
   }
   function addBundle(imported: Bundle) {
     buildWorkspace(imported);
+    const existing = bundles.find((b) => b.id === (updateTarget ?? imported.id));
+    if (existing) {
+      setPending({ before: existing, incoming: imported });
+      setDialog('changes');
+      setUpdateTarget(undefined);
+      return;
+    }
     setBundles((bs) => [...bs.filter((b) => b.id !== imported.id), imported]);
     switchWorkspace(imported.id);
     setView('map');
     setDialog(null);
+    setUpdateTarget(undefined);
     setNotice('Workspace imported. Original Markdown preserved.');
+  }
+  function beginImport(update = false) {
+    setUpdateTarget(update ? bundle.id : undefined);
+    setError('');
+    setDialog('import');
+  }
+  function closeDialog() {
+    githubRequest.current?.abort();
+    githubRequest.current = null;
+    setBusy(false);
+    setDialog(null);
+    setUpdateTarget(undefined);
+    setPending(undefined);
+  }
+  function showReview(index?: number) {
+    setFocusedConnection(index);
+    setError('');
+    setDialog('review');
+  }
+  function openEvidence(evidence: Evidence) {
+    const result = resolveEvidence(bundle.files, evidence);
+    if (!bundle.files.some((f) => f.path === evidence.path)) return;
+    setDialog(null);
+    setSelected('');
+    setDocPath(evidence.path);
+    setRaw(true);
+    setDocRange(result.startLine ? { start: result.startLine, end: result.endLine! } : undefined);
+    if (!result.startLine)
+      setNotice(
+        'The saved excerpt no longer has a unique location. Review the current source and reattach it.',
+      );
+    else
+      setTimeout(
+        () =>
+          docRef.current
+            ?.querySelector(`[data-source-line="${result.startLine}"]`)
+            ?.scrollIntoView({ block: 'center' }),
+        100,
+      );
+  }
+  async function markReviewed() {
+    setBusy(true);
+    const target = bundle;
+    try {
+      const review = {
+        fingerprint: await fingerprint(target),
+        reviewedAt: new Date().toISOString(),
+      };
+      setBundles((bs) => bs.map((b) => (b === target ? { ...b, review } : b)));
+      setNotice('Human review recorded for these source files and this workflow definition.');
+    } catch {
+      setError('Review could not be recorded.');
+    } finally {
+      setBusy(false);
+    }
+  }
+  async function readGithub(repository: string, ref: string, directory: string, refresh = false) {
+    githubRequest.current?.abort();
+    const controller = new AbortController();
+    githubRequest.current = controller;
+    setBusy(true);
+    setError('');
+    const current = bundle;
+    try {
+      const { importGithub } = await import('./lib/github');
+      const imported = await importGithub(repository, ref, directory, controller.signal);
+      if (controller.signal.aborted) return;
+      if (refresh) {
+        setPending({ before: current, incoming: imported });
+        setDialog('changes');
+      } else addBundle(imported);
+    } catch (e) {
+      if (!controller.signal.aborted) setError((e as Error).message);
+    } finally {
+      if (githubRequest.current === controller) {
+        githubRequest.current = null;
+        setBusy(false);
+      }
+    }
   }
   async function importFiles(fileList: FileList | null, folder: boolean) {
     if (!fileList?.length) return;
@@ -261,7 +388,7 @@ export default function App() {
       const { download, diagramSvg, snapshotHtml } = await import('./lib/export');
       const name = slug(bundle.title);
       if (kind === 'html')
-        download(snapshotHtml(workspace, direction), `${name}.html`, 'text/html');
+        download(snapshotHtml(workspace, direction, reviewState), `${name}.html`, 'text/html');
       if (kind === 'svg')
         download(diagramSvg(workspace, direction), `${name}.svg`, 'image/svg+xml');
       if (kind === 'json')
@@ -348,7 +475,7 @@ export default function App() {
             aria-label="Import a workflow"
             onClick={() => {
               setError('');
-              setDialog('import');
+              beginImport();
             }}
           >
             <Plus size={15} />
@@ -371,7 +498,7 @@ export default function App() {
           className="import-sidebar"
           onClick={() => {
             setError('');
-            setDialog('import');
+            beginImport();
           }}
         >
           <Plus size={16} />
@@ -488,6 +615,32 @@ export default function App() {
               </span>
             </div>
           </section>
+          <div className="source-status-bar">
+            <div>
+              <GitBranch size={14} />
+              <code>
+                {bundle.source?.commit
+                  ? bundle.source.commit.slice(0, 12) +
+                    (bundle.source.dirty ? ' + local changes' : '')
+                  : 'Unversioned snapshot'}
+              </code>
+              <span>{reviewState}</span>
+            </div>
+            {localUpdate ? (
+              <button
+                className="text-button"
+                onClick={() => {
+                  setPending({ before: bundle, incoming: localUpdate });
+                  setDialog('changes');
+                }}
+              >
+                Local source update available
+              </button>
+            ) : null}
+            <button className="text-button" onClick={() => showReview()}>
+              Source review <ArrowUpRight size={14} />
+            </button>
+          </div>
           {storageError ? (
             <div className="banner warning" role="alert">
               <AlertCircle size={16} />
@@ -553,6 +706,7 @@ export default function App() {
                     workspace={workspace}
                     selected={selected}
                     onSelect={selectStep}
+                    onConnection={showReview}
                     direction={direction}
                     setDirection={setDirection}
                   />
@@ -747,7 +901,7 @@ export default function App() {
                                   <button
                                     className="relationship"
                                     key={i}
-                                    onClick={() => selectStep(target!.id)}
+                                    onClick={() => showReview(workspace.connections.indexOf(e))}
                                   >
                                     <span>{incoming ? '←' : '→'}</span>
                                     <div>
@@ -816,7 +970,25 @@ export default function App() {
                       <code className="source-path">{source.path}</code>
                       {raw || !/\.md$/i.test(source.path) ? (
                         <pre className="source-code">
-                          <code>{source.content}</code>
+                          <code>
+                            {sourceLines(source.content).map((line, i) => (
+                              <span
+                                className={
+                                  docRange && i + 1 >= docRange.start && i + 1 <= docRange.end
+                                    ? 'source-line highlighted'
+                                    : 'source-line'
+                                }
+                                data-source-line={i + 1}
+                                key={i}
+                              >
+                                <span className="line-number" aria-hidden="true">
+                                  {i + 1}
+                                </span>
+                                {line}
+                                {'\n'}
+                              </span>
+                            ))}
+                          </code>
                         </pre>
                       ) : (
                         <>
@@ -909,7 +1081,10 @@ export default function App() {
         </div>
       ) : null}
       {dialog === 'import' ? (
-        <Modal title="Bring your skills into view." onClose={() => setDialog(null)}>
+        <Modal
+          title={updateTarget ? 'Compare updated source files.' : 'Bring your skills into view.'}
+          onClose={closeDialog}
+        >
           <p className="muted">
             Choose a repository folder with SKILL.md files, or restore a portable Skill Atlas
             bundle. Files are read locally.
@@ -951,6 +1126,12 @@ export default function App() {
             />
             <ChevronRight size={17} />
           </label>
+          {!updateTarget ? (
+            <GithubImport
+              busy={busy}
+              onImport={(repo, ref, dir) => void readGithub(repo, ref, dir)}
+            />
+          ) : null}
           <div className="banner">
             <ShieldCheck size={15} />
             No server upload, account, or AI API required. Up to 100 skills / 8 MB per workspace.
@@ -962,8 +1143,53 @@ export default function App() {
           ) : null}
         </Modal>
       ) : null}
+      {dialog === 'review' ? (
+        <Modal title="Trace the map to its source." onClose={closeDialog} wide>
+          <SourceReview
+            workspace={workspace}
+            status={reviewState}
+            focused={focusedConnection}
+            busy={busy}
+            onRefresh={() =>
+              void readGithub(
+                bundle.source!.repository!,
+                bundle.source!.ref ?? 'HEAD',
+                bundle.source!.directory ?? '',
+                true,
+              )
+            }
+            onLocal={() => beginImport(true)}
+            onReview={() => void markReviewed()}
+            onOpen={openEvidence}
+            onEdit={() => {
+              setError('');
+              setDialog('edit');
+            }}
+          />
+          {error ? (
+            <p className="error" role="alert">
+              {error}
+            </p>
+          ) : null}
+        </Modal>
+      ) : null}
+      {dialog === 'changes' && pending ? (
+        <Modal title="Review source changes." onClose={closeDialog} wide>
+          <ChangeReview
+            before={pending.before}
+            incoming={pending.incoming}
+            onApply={(changed) => {
+              setBundles((bs) => bs.map((b) => (b.id === pending.before.id ? changed : b)));
+              switchWorkspace(changed.id);
+              setPending(undefined);
+              setDialog(null);
+              setNotice('Source update applied. Review the current handoffs and their evidence.');
+            }}
+          />
+        </Modal>
+      ) : null}
       {dialog === 'export' ? (
-        <Modal title="A workflow worth sharing." onClose={() => setDialog(null)}>
+        <Modal title="A workflow worth sharing." onClose={closeDialog}>
           <p className="muted">
             Exports are snapshots of <strong>{bundle.title}</strong>. Document exports include the
             original imported text.
@@ -1027,7 +1253,7 @@ export default function App() {
         </Modal>
       ) : null}
       {dialog === 'edit' ? (
-        <Modal title="Define the workflow." onClose={() => setDialog(null)} wide>
+        <Modal title="Define the workflow." onClose={closeDialog} wide>
           <WorkflowEditor
             workspace={workspace}
             onSave={saveManifest}
@@ -1041,7 +1267,7 @@ export default function App() {
         </Modal>
       ) : null}
       {dialog === 'remove' ? (
-        <Modal title="Remove this workspace?" onClose={() => setDialog(null)}>
+        <Modal title="Remove this workspace?" onClose={closeDialog}>
           <p>
             This removes “{bundle.title}” from this browser. Export a portable bundle first if you
             want to keep edits. Example workflows return on reload; CLI imports remain on disk.
@@ -1067,7 +1293,7 @@ export default function App() {
         </Modal>
       ) : null}
       {dialog === 'help' ? (
-        <Modal title="Skills, understood together." onClose={() => setDialog(null)} wide>
+        <Modal title="Skills, understood together." onClose={closeDialog} wide>
           <div className="help-copy">
             <p>
               Skill Atlas is a documentation workspace for agent skills. It reads files, reveals

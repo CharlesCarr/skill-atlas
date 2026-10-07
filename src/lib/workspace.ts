@@ -3,6 +3,7 @@ import { unified } from 'unified';
 import remarkParse from 'remark-parse';
 import remarkGfm from 'remark-gfm';
 import { visit } from 'unist-util-visit';
+import { evidenceFromLines, resolveEvidence } from './trust';
 import type {
   Bundle,
   Manifest,
@@ -12,6 +13,8 @@ import type {
   Connection,
   Workspace,
   Issue,
+  Evidence,
+  SourceSnapshot,
 } from './types';
 
 export const LIMITS = { files: 1200, skills: 100, bytes: 8_000_000, fileBytes: 1_000_000 };
@@ -66,31 +69,60 @@ export function parseSkill(file: SourceFile): Skill {
     throw new Error('Skill description must be text.');
   const body = match ? normalized.slice(match[0].length) : normalized;
   const tree = processor.parse(body);
+  const offset = match ? match[0].split('\n').length - 1 : 0;
+  const excerpt = (start: number, end = start) =>
+    evidenceFromLines(file, start + offset, end + offset);
+  const invocations: Skill['invocations'] = [];
   const sections: Skill['sections'] = [],
     links: Skill['links'] = [],
     mentions = new Set<string>();
-  const definitions = new Map<string, string>();
+  const definitions = new Map<string, { href: string; evidence: Evidence }>();
   visit(tree, 'definition', (n) => {
-    definitions.set(n.identifier.toLowerCase(), n.url);
+    definitions.set(n.identifier.toLowerCase(), {
+      href: n.url,
+      evidence: excerpt(n.position?.start.line ?? 1, n.position?.end.line ?? 1),
+    });
   });
   visit(tree, (n) => {
     if (n.type === 'heading')
       sections.push({
         title: nodeText(n),
         depth: n.depth,
-        line: (n.position?.start.line ?? 1) + (match?.[0].split('\n').length ?? 1) - 1,
+        line: (n.position?.start.line ?? 1) + offset,
       });
     if (n.type === 'inlineCode') {
       const invocation = n.value.match(/^\$([a-zA-Z][\w-]*)$/);
-      if (invocation) mentions.add(invocation[1]);
+      if (invocation) {
+        mentions.add(invocation[1]);
+        invocations.push({ target: invocation[1], evidence: excerpt(n.position?.start.line ?? 1) });
+      }
     }
     if (n.type === 'text')
-      for (const m of n.value.matchAll(/\$([a-zA-Z][\w-]*)/g)) mentions.add(m[1]);
+      for (const m of n.value.matchAll(/\$([a-zA-Z][\w-]*)/g)) {
+        mentions.add(m[1]);
+        const line =
+          (n.position?.start.line ?? 1) + n.value.slice(0, m.index).split('\n').length - 1;
+        invocations.push({ target: m[1], evidence: excerpt(line) });
+      }
     if (n.type === 'link')
-      links.push({ label: nodeText(n), href: n.url, line: n.position?.start.line ?? 1 });
+      links.push({
+        label: nodeText(n),
+        href: n.url,
+        line: (n.position?.start.line ?? 1) + offset,
+        evidence: [excerpt(n.position?.start.line ?? 1, n.position?.end.line ?? 1)],
+      });
     if (n.type === 'linkReference') {
-      const href = definitions.get(n.identifier.toLowerCase());
-      if (href) links.push({ label: nodeText(n), href, line: n.position?.start.line ?? 1 });
+      const definition = definitions.get(n.identifier.toLowerCase());
+      if (definition)
+        links.push({
+          label: nodeText(n),
+          href: definition.href,
+          line: (n.position?.start.line ?? 1) + offset,
+          evidence: [
+            excerpt(n.position?.start.line ?? 1, n.position?.end.line ?? 1),
+            definition.evidence,
+          ],
+        });
     }
   });
   const dir = file.path.split('/').at(-2) ?? 'skill';
@@ -106,6 +138,7 @@ export function parseSkill(file: SourceFile): Skill {
     frontmatter,
     sections,
     mentions: [...mentions],
+    invocations,
     links,
   };
 }
@@ -117,6 +150,72 @@ function text(value: unknown, field: string): string {
     throw new Error(`${field} must be non-empty text.`);
   if (value.length > 5000) throw new Error(`${field} is too long.`);
   return value;
+}
+export function validateEvidence(value: unknown): Evidence {
+  if (!record(value)) throw new Error('Evidence must be a mapping.');
+  const path = normalizePath(text(value.path, 'Evidence path'));
+  if (
+    !path ||
+    !Number.isInteger(value.startLine) ||
+    !Number.isInteger(value.endLine) ||
+    Number(value.startLine) < 1 ||
+    Number(value.endLine) < Number(value.startLine) ||
+    Number(value.endLine) > 1000000
+  )
+    throw new Error('Evidence needs a valid path and inclusive line range.');
+  if (
+    typeof value.quote !== 'string' ||
+    !value.quote.trim() ||
+    value.quote.length > 20000 ||
+    value.quote.replace(/\r\n/g, '\n').split('\n').length !==
+      Number(value.endLine) - Number(value.startLine) + 1
+  )
+    throw new Error('Evidence quote must match its line-range length (up to 20,000 characters).');
+  return {
+    path,
+    startLine: Number(value.startLine),
+    endLine: Number(value.endLine),
+    quote: value.quote,
+  };
+}
+function validateSource(value: unknown): SourceSnapshot {
+  if (!record(value) || !['github', 'git', 'folder'].includes(String(value.kind)))
+    throw new Error('Invalid source snapshot.');
+  const result: SourceSnapshot = {
+    kind: value.kind as SourceSnapshot['kind'],
+    importedAt: text(value.importedAt, 'Import date'),
+  };
+  if (!Number.isFinite(Date.parse(result.importedAt))) throw new Error('Invalid import date.');
+  if (value.commit !== undefined) {
+    if (typeof value.commit !== 'string' || !/^[a-f0-9]{40,64}$/.test(value.commit))
+      throw new Error('Invalid source commit.');
+    result.commit = value.commit;
+  }
+  if (value.repository !== undefined) result.repository = text(value.repository, 'Repository');
+  if (value.ref !== undefined) result.ref = text(value.ref, 'Revision');
+  if (value.directory !== undefined) {
+    if (
+      typeof value.directory !== 'string' ||
+      value.directory.startsWith('/') ||
+      value.directory.split(/[\\/]/).includes('..')
+    )
+      throw new Error('Invalid source subfolder.');
+    result.directory = normalizePath(value.directory);
+  }
+  if (value.dirty !== undefined) {
+    if (typeof value.dirty !== 'boolean') throw new Error('Working tree state must be boolean.');
+    result.dirty = value.dirty;
+  }
+  if (
+    result.kind === 'github' &&
+    (!result.commit ||
+      !/^https:\/\/github\.com\/[\w.-]+\/[\w.-]+$/.test(result.repository ?? '') ||
+      result.dirty !== false)
+  )
+    throw new Error('GitHub snapshots need a repository, commit and clean state.');
+  if (result.kind === 'folder' && (result.commit || result.dirty !== undefined))
+    throw new Error('Folder snapshots cannot claim a Git revision.');
+  return result;
 }
 export function validateManifest(value: unknown): Manifest {
   if (!record(value) || value.version !== 1)
@@ -158,6 +257,15 @@ export function validateManifest(value: unknown): Manifest {
       to: String(v.to),
       type: v.type as Connection['type'],
       label: text(v.label, 'Connection label'),
+      ...(v.evidence === undefined
+        ? {}
+        : {
+            evidence: (() => {
+              if (!Array.isArray(v.evidence) || v.evidence.length > 20)
+                throw new Error('At most 20 excerpts per connection.');
+              return v.evidence.map(validateEvidence);
+            })(),
+          }),
     };
   });
   return {
@@ -194,6 +302,22 @@ export function validateBundle(value: unknown): Bundle {
     title: text(value.title, 'Workspace title'),
     description: typeof value.description === 'string' ? value.description : '',
     files,
+    ...(value.source === undefined ? {} : { source: validateSource(value.source) }),
+    ...(value.review === undefined
+      ? {}
+      : {
+          review: (() => {
+            if (
+              !record(value.review) ||
+              typeof value.review.fingerprint !== 'string' ||
+              !/^[a-f0-9]{64}$/.test(value.review.fingerprint) ||
+              typeof value.review.reviewedAt !== 'string' ||
+              !Number.isFinite(Date.parse(value.review.reviewedAt))
+            )
+              throw new Error('Invalid review record.');
+            return { fingerprint: value.review.fingerprint, reviewedAt: value.review.reviewedAt };
+          })(),
+        }),
     manifest: value.manifest === undefined ? undefined : validateManifest(value.manifest),
   };
 }
@@ -220,6 +344,12 @@ export function buildWorkspace(input: Bundle): Workspace {
   const references: Connection[] = [];
   for (const skill of skills) {
     const related = new Set(skill.mentions);
+    const evidenceByTarget = new Map<string, Evidence[]>();
+    for (const invocation of skill.invocations)
+      evidenceByTarget.set(invocation.target, [
+        ...(evidenceByTarget.get(invocation.target) ?? []),
+        invocation.evidence,
+      ]);
     for (const link of skill.links) {
       const path = resolvePath(skill.path, link.href);
       if (path) {
@@ -230,7 +360,13 @@ export function buildWorkspace(input: Bundle): Workspace {
             message: `Missing linked file: ${link.href}`,
           });
         const target = byPath.get(path);
-        if (target) related.add(target.id);
+        if (target) {
+          related.add(target.id);
+          evidenceByTarget.set(target.id, [
+            ...(evidenceByTarget.get(target.id) ?? []),
+            ...link.evidence,
+          ]);
+        }
       }
     }
     for (const target of related) {
@@ -241,6 +377,11 @@ export function buildWorkspace(input: Bundle): Workspace {
           to: target,
           label: 'References in Markdown',
           type: 'reference',
+          evidence: [
+            ...new Map(
+              (evidenceByTarget.get(target) ?? []).map((e) => [JSON.stringify(e), e]),
+            ).values(),
+          ].slice(0, 20),
         });
       else
         issues.push({
@@ -261,6 +402,16 @@ export function buildWorkspace(input: Bundle): Workspace {
     steps = skills.map((s) => ({ id: s.id, skill: s.id, kind: 'skill' }));
     connections = references;
   }
+  for (const connection of connections)
+    for (const evidence of connection.evidence ?? []) {
+      const status = resolveEvidence(bundle.files, evidence).status;
+      if (!['matches', 'moved'].includes(status))
+        issues.push({
+          severity: 'warning',
+          path: evidence.path,
+          message: `Connection "${connection.label}" has ${status} source evidence.`,
+        });
+    }
   return { bundle, skills, steps, connections, issues, authored: !!bundle.manifest };
 }
 export function bundleFromFiles(files: SourceFile[], title = 'Imported workflow'): Bundle {
@@ -282,10 +433,13 @@ export function bundleFromFiles(files: SourceFile[], title = 'Imported workflow'
       manifest?.description ?? 'Imported from local Markdown. The original files are preserved.',
     files,
     manifest,
+    source: { kind: 'folder', importedAt: new Date().toISOString() },
   });
 }
 export const includedPath = (path: string) =>
-  !/(^|\/)(node_modules|\.git|dist|build|\.next|test-results|playwright-report)(\/|$)/.test(path) &&
+  !/(^|\/)(node_modules|\.git|dist|build|\.next|\.worktrees|test-results|playwright-report)(\/|$)/.test(
+    path,
+  ) &&
   (/\.md$/i.test(path) ||
     /(^|\/)(?:\.agents\/skills\/|skills\/)?[^/]+\/(assets|scripts|references)\/.*\.(json|csv|ts|js|py|sh|txt|ya?ml)$/i.test(
       path,
