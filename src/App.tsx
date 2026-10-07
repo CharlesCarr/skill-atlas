@@ -361,7 +361,7 @@ export default function App() {
               onClick={() => switchWorkspace(b.id)}
               className={`workflow-item ${b.id === bundle.id ? 'selected' : ''}`}
             >
-              <span className={`workflow-dot ${b.id === 'engineering-demo' ? 'blue' : ''}`} />
+              <span className={`workflow-dot ${b.id === 'engineering-demo' ? 'slate' : ''}`} />
               <span>{b.title}</span>
               {b.id === bundle.id ? <ChevronRight size={13} /> : null}
             </button>
@@ -610,7 +610,7 @@ export default function App() {
                   <div className="library-grid">
                     {filteredSkills.map((s, i) => (
                       <button
-                        className={`library-card tone-${['sage', 'blue', 'amber', 'violet'][i % 4]}`}
+                        className={`library-card tone-${['graphite', 'slate', 'stone', 'mist'][i % 4]}`}
                         key={s.id}
                         onClick={() => openDoc(s.path)}
                       >

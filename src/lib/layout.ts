@@ -25,11 +25,12 @@ export function layout(workspace: Workspace, direction: Direction = 'LR') {
     };
   });
 }
-export const tones = ['sage', 'blue', 'amber', 'violet', 'sage', 'ink'];
+export const tones = ['graphite', 'slate', 'stone', 'mist', 'graphite', 'ink'];
+// Accent hues stay confined to narrow node markers and small interface details.
 export const toneColors: Record<string, string> = {
-  sage: '#2d7256',
-  blue: '#426a9b',
-  amber: '#a26d24',
-  violet: '#7b5b98',
-  ink: '#3d4652',
+  graphite: '#666666',
+  slate: '#7b818a',
+  stone: '#938c82',
+  mist: '#8b8791',
+  ink: '#555555',
 };

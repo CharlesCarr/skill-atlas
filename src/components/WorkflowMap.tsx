@@ -114,16 +114,16 @@ export function WorkflowMap({
         label: e.label,
         type: 'smoothstep',
         style: {
-          stroke: e.type === 'handoff' ? '#92a99b' : e.type === 'feedback' ? '#b48854' : '#abb4c0',
+          stroke: e.type === 'handoff' ? '#a3a3a3' : e.type === 'feedback' ? '#8e8e8e' : '#b3b3b3',
           strokeWidth: 1.5,
           strokeDasharray: e.type === 'handoff' ? undefined : '5 5',
         },
-        labelStyle: { fill: '#66746b', fontSize: 12, fontFamily: 'inherit' },
-        labelBgStyle: { fill: '#f5f6f4', fillOpacity: 0.95 },
+        labelStyle: { fill: '#707070', fontSize: 12, fontFamily: 'inherit' },
+        labelBgStyle: { fill: '#f6f6f6', fillOpacity: 0.95 },
         labelBgPadding: [8, 5],
         markerEnd: {
           type: MarkerType.ArrowClosed,
-          color: e.type === 'handoff' ? '#92a99b' : '#abb4c0',
+          color: e.type === 'handoff' ? '#a3a3a3' : '#b3b3b3',
           width: 14,
           height: 14,
         },
@@ -199,11 +199,11 @@ export function WorkflowMap({
         aria-label="Skills and their connections"
         onNodeDragStop={(_, node) => onSelect(node.id)}
       >
-        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d4dad4" />
+        <Background variant={BackgroundVariant.Dots} gap={20} size={1} color="#d8d8d8" />
         <Controls showInteractive={false} />
         <MiniMap
-          nodeColor={(n) => toneColors[(n.data as SkillNodeData).tone] ?? '#2d7256'}
-          maskColor="rgba(245,246,244,.75)"
+          nodeColor={(n) => toneColors[(n.data as SkillNodeData).tone] ?? '#616161'}
+          maskColor="rgba(245,245,245,.75)"
           zoomable
           pannable
         />
